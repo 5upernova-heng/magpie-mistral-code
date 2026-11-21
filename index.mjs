@@ -249,8 +249,9 @@ async function readUsage(key) {
     const reset = Number.isFinite(resetsAt)
       ? new Date(resetsAt)
       : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
-    const start = Date.UTC(reset.getUTCFullYear(), reset.getUTCMonth() - 1, 1,
-      reset.getUTCHours(), reset.getUTCMinutes(), reset.getUTCSeconds())
+    const lastDay = new Date(Date.UTC(reset.getUTCFullYear(), reset.getUTCMonth(), 0)).getUTCDate()
+    const start = Date.UTC(reset.getUTCFullYear(), reset.getUTCMonth() - 1,
+      Math.min(reset.getUTCDate(), lastDay), reset.getUTCHours(), reset.getUTCMinutes(), reset.getUTCSeconds())
     const span = Math.max(3600, Math.floor((reset - start) / 1000))
     windows.push({
       name: "Monthly Vibe Code",
