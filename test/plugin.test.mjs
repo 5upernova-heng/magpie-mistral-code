@@ -204,7 +204,7 @@ test("usage reads the monthly Vibe Code budget and the plan", async () => {
   expect(u.windows).toHaveLength(1)
   expect(u.windows[0].used).toBe(42.5)
   expect(u.windows[0].resetsAt).toBe(Date.parse("2099-01-01T00:00:00Z"))
-  expect(u.windows[0].span).toBeGreaterThan(3600)
+  expect(u.windows[0].span).toBe(31 * 86400)
 })
 
 test("usage without a sign-in says so", async () => {
