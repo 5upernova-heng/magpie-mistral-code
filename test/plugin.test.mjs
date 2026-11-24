@@ -424,3 +424,43 @@ test("the loader puts an earlier turn's thinking in the typed part", async () =>
   })
   expect(state.bodies[0]).not.toContain("reasoning_content")
 })
+
+// Alma 走 OpenAI 兼容接口时会在 message、content 元素和 tool_calls 元素上带
+// cache_control。api.mistral.ai 把它当作 unknown field 拒绝(422
+// extra_forbidden)，所以它必须被去掉；tool call 的 function.arguments 是用户
+// 自己的 JSON 字符串，即使里面出现这个键也要原样保留。
+test("strips cache_control from messages, content parts and tool calls", () => {
+  const { mistralBody } = _internal
+  const args = '{"text":"keep cache_control here"}'
+  const body = JSON.stringify({
+    model: "deepseek-v4-1-flash-1017",
+    messages: [
+      { role: "system", content: "You are helpful.", cache_control: { type: "ephemeral" } },
+      { role: "user", content: [{ type: "text", text: "hello", cache_control: { type: "ephemeral" } }] },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            cache_control: { type: "ephemeral" },
+            function: { name: "write", arguments: args },
+          },
+        ],
+      },
+    ],
+  })
+  expect(mistralRefuse(body)).toBeTruthy()
+  expect(mistralRefuse(mistralBody(body))).toBeNull()
+  const out = JSON.parse(mistralBody(body))
+  expect(out.messages[0]).toEqual({ role: "system", content: "You are helpful." })
+  expect(out.messages[1]).toEqual({ role: "user", content: [{ type: "text", text: "hello" }] })
+  expect(out.messages[2].tool_calls[0].cache_control).toBeUndefined()
+  expect(out.messages[2].tool_calls[0].function.arguments).toBe(args)
+
+  // 只有 cache_control 的请求也要被改写，不能被提前返回原样放过
+  const only = JSON.stringify({ model: "m", messages: [{ role: "user", content: "hi", cache_control: { type: "ephemeral" } }] })
+  expect(mistralBody(only)).not.toBe(only)
+  expect(JSON.parse(mistralBody(only)).messages[0]).toEqual({ role: "user", content: "hi" })
+})

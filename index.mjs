@@ -293,16 +293,35 @@ function thinkingText(m) {
 // keeps its bytes. A prefill (prefix) keeps its content as it is: its text
 // is what goes on, so the thinking is only dropped there.
 function asMistralMessage(m) {
-  if (!THINKING_FIELDS.some((f) => f in m)) return false
-  const think = thinkingText(m)
-  for (const f of THINKING_FIELDS) delete m[f]
-  if (think === "" || m.role !== "assistant" || m.prefix === true) return true
-  const part = { type: "thinking", thinking: [{ type: "text", text: think }] }
-  const c = m.content
-  if (typeof c === "string") m.content = c === "" ? [part] : [part, { type: "text", text: c }]
-  else if (Array.isArray(c)) m.content = [part, ...c]
-  else m.content = [part]
-  return true
+  let changed = false
+  // Mistral rejects prompt-caching hints as extra_forbidden. Strip them from
+  // the message, its content parts and any assistant tool calls, but keep the
+  // tool call arguments byte-for-byte (a user's JSON may contain that key).
+  if ("cache_control" in m) {
+    delete m.cache_control
+    changed = true
+  }
+  for (const blocks of [m.content, m.tool_calls]) {
+    if (!Array.isArray(blocks)) continue
+    for (const block of blocks) {
+      if (block && typeof block === "object" && "cache_control" in block) {
+        delete block.cache_control
+        changed = true
+      }
+    }
+  }
+  if (THINKING_FIELDS.some((f) => f in m)) {
+    const think = thinkingText(m)
+    for (const f of THINKING_FIELDS) delete m[f]
+    if (think === "" || m.role !== "assistant" || m.prefix === true) return true
+    const part = { type: "thinking", thinking: [{ type: "text", text: think }] }
+    const c = m.content
+    if (typeof c === "string") m.content = c === "" ? [part] : [part, { type: "text", text: c }]
+    else if (Array.isArray(c)) m.content = [part, ...c]
+    else m.content = [part]
+    return true
+  }
+  return changed
 }
 
 // mistralBody is a chat request's body with every message's thinking in the
@@ -310,7 +329,7 @@ function asMistralMessage(m) {
 // such field comes back as it was, byte for byte, and so does one that isn't
 // a chat request's JSON.
 function mistralBody(body) {
-  if (typeof body !== "string" || !body.includes("reasoning")) return body
+  if (typeof body !== "string" || (!body.includes("reasoning") && !body.includes("cache_control"))) return body
   let q
   try {
     q = JSON.parse(body)
